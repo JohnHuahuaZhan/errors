@@ -35,14 +35,6 @@ func (f Frame) name() string {
 }
 
 // Format formats the frame according to the fmt.Formatter interface.
-//
-//    %f    源文件名加后缀
-//    %+f   完整源文件路径
-//    %d    行
-//    %n    函数名
-//    %+n   带包前缀的函数名
-//    %s    同 %f:%d
-//    %v    同 %+f:%+n#%d
 func (f Frame) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'f':
@@ -62,25 +54,39 @@ func (f Frame) Format(s fmt.State, verb rune) {
 			io.WriteString(s, onlyFuncName(f.name()))
 		}
 	case 's':
-		fmt.Fprintf(s, "%f", f)
-		io.WriteString(s, ":")
-		f.Format(s, 'd')
+		switch {
+		case s.Flag('#'):
+			io.WriteString(s, "{")
+			fmt.Fprintf(s, "\"%s\":\"%f\",", "file", f)
+			fmt.Fprintf(s, "\"%s\":%d", "line", f)
+			io.WriteString(s, "}")
+		default:
+			fmt.Fprintf(s, "%f", f)
+			io.WriteString(s, ":")
+			f.Format(s, 'd')
+		}
+
 	case 'v':
-		fmt.Fprintf(s, "%+f", f)
-		io.WriteString(s, ":")
-		fmt.Fprintf(s, "%+n", f)
-		io.WriteString(s, "#")
-		f.Format(s, 'd')
+		switch {
+		case s.Flag('#'):
+			io.WriteString(s, "{")
+			fmt.Fprintf(s, "\"%s\":\"%+f\",", "file", f)
+			fmt.Fprintf(s, "\"%s\":\"%+n\",", "name", f)
+			fmt.Fprintf(s, "\"%s\":%d", "line", f)
+			io.WriteString(s, "}")
+		default:
+			fmt.Fprintf(s, "%+f", f)
+			io.WriteString(s, ":")
+			fmt.Fprintf(s, "%+n", f)
+			io.WriteString(s, "#")
+			f.Format(s, 'd')
+		}
 	}
 }
 
 type StackTrace []Frame
 
 // Format formats the stack of Frames according to the fmt.Formatter interface.
-//
-//    %s	用换行组织每一帧，每一帧的内容为Frame的%s
-//    %v	用换行组织每一帧，每一帧的内容为Frame的%v
-//    %.n   控制显示的stack层数，默认全部
 func (st StackTrace) Format(s fmt.State, verb rune) {
 	p, _ := s.Precision()
 
@@ -89,9 +95,21 @@ func (st StackTrace) Format(s fmt.State, verb rune) {
 	}
 	switch verb {
 	case 'v', 's':
-		for i := 0; i < p; i++ {
-			io.WriteString(s, "\n")
-			st[i].Format(s, verb)
+		switch {
+		case s.Flag('#'):
+			io.WriteString(s, "[")
+			for i := 0; i < p; i++ {
+				st[i].Format(s, verb)
+				if i < p-1 {
+					io.WriteString(s, ",")
+				}
+			}
+			io.WriteString(s, "]")
+		default:
+			for i := 0; i < p; i++ {
+				st[i].Format(s, verb)
+				io.WriteString(s, "\n")
+			}
 		}
 	}
 }
